@@ -5,7 +5,7 @@ WITH client_filters AS (
 		application_type
 	FROM production_etl.view_api_keys_latest
 	WHERE key_type = 1
-	    AND client = 'Stillwater'
+	    AND client = 'Insert Name'
 ),
 
 api_imagery AS (
