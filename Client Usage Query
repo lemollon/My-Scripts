@@ -1,3 +1,12 @@
+--date_trunc('month', date(timestep)) AS date, - Will give data between the dates - 1 row--
+
+--date(timestep) AS date - Will group data by day--
+
+--If you want all the records of the day remove the number “7” from the group by clause, in that case, I would suggest to - timestep AS date--
+
+
+
+
 WITH client_filters AS (
 	SELECT key,
 		client AS name,
