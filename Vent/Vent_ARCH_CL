@@ -1,0 +1,10 @@
+select [request_time:aggregation] as date, avg(cast(json_extract_scalar(response, '$.property_summary.structure_count') as int)) as building_count
+from "production_etl".api_responses ar
+join "production_etl".view_api_keys_latest ak on ak.key = ar.user_token
+ where [user_token=api_key]
+  and [ak.client=client]
+  and [request_time=daterange] 
+  and request_type = 'describe_commercial_location'
+  and json_extract_scalar(response, '$.status.error_code') = 'ok'
+  and [request_time=daterange]                                      
+group by 1
