@@ -1,0 +1,20 @@
+SELECT DISTINCT org.name AS client,
+		api.name as key,
+		description,
+		delivery_channel AS delivery_channel,
+		environment AS environment,
+		use_case AS use_case
+	FROM production_etl.apikeys api
+		LEFT JOIN production_etl.organizations org ON org.id = api.organization_id
+	WHERE upper(environment) IN ('PRODUCTION', 'TEST')
+		AND org.name NOT LIKE '%test%'
+		AND org.name NOT LIKE '%Scratch%'
+		AND org.name NOT LIKE '%scratch%'
+		AND org.name NOT LIKE '%cape%'
+		AND org.name NOT LIKE '%CAPE%'
+		AND org.name NOT LIKE '%Test%'
+		AND org.name NOT LIKE '%Demo%'
+		AND org.name NOT LIKE '%DEMO%'
+		AND org.name NOT LIKE '%Customer%'
+		AND org.name NOT LIKE '%Sandbox%'
+		AND org.name NOT IN ('leah-api-key', 'portal-upgrade-2')
