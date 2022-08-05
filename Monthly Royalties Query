@@ -1,0 +1,47 @@
+-- Personal Lines WRR
+select b.client, b.key_type,
+    json_extract(prometheus_api_key_response, '$.third_party_credentials.hazard_hub.token') as HH_ApiKey,
+    a.user_token, 
+    b.description,
+    response_year, 
+    response_month, 
+    json_extract(response, '$.status.error_code') as response_status,
+    count(distinct(request_uuid)) as Request_Count
+from api_responses_partitioned a join view_api_keys_latest b on a.user_token = b.key
+where request_type = 'describe_location'
+and response_year = '2022'
+and response_month = '7'
+and json_array_contains(json_extract(prometheus_api_key_response, '$.datapack.personal_lines.enabled_features'), 'wildfire_risk_rating')
+group by 1,2,3,4,5,6,7,8
+
+-- Commercial Lines WRR
+select b.client, b.key_type, 
+    json_extract(prometheus_api_key_response, '$.third_party_credentials.hazard_hub.token') as HH_ApiKey,
+    a.user_token, 
+    b.description,
+    response_year, 
+    response_month, 
+    json_extract(response, '$.status.error_code') as response_status,
+    count(distinct(request_uuid)) as Request_Count
+from api_responses_partitioned a join view_api_keys_latest b on a.user_token = b.key
+where request_type in ('describe_commercial_location', 'aoi_commercial', 'multi_address_cl')
+and response_year = '2022'
+and response_month = '7'
+and json_array_contains(json_extract(prometheus_api_key_response, '$.datapack.commercial_lines.enabled_features'), 'wildfire_risk_rating')
+group by 1,2,3,4,5,6,7,8
+
+--- HH Resale 
+select b.client,
+       b.key_type,
+       a.user_token,
+       b.description,
+       a.response_year,
+       a.response_month,
+       json_extract(response, '$.status.error_code') as response_status,
+       count(distinct(a.request_uuid)) as Request_Count 
+from production_etl.api_responses_partitioned a 
+join production_etl.view_api_keys_latest b on a.user_token = b.key 
+where a.request_type = 'hazardhub'
+  and a.response_year = '2022'
+  and a.response_month = '7'
+group by 1,2,3,4,5,6,7
