@@ -1,0 +1,207 @@
+WITH client_filters AS (
+	SELECT key,
+		client AS name,
+		project_type,
+		application_type
+	FROM production_etl.view_api_keys_latest
+	WHERE key_type = 1
+	    AND client = 'Stillwater'
+),
+
+all_requests AS (
+	--personal
+	(
+		SELECT 'Personal Lines' AS type,
+			date(a.created_at) AS timestep,
+			b.name AS client_name,
+			a.key AS key,
+			b.project_type AS use_cases,
+			b.application_type AS application_type,
+			upper(error_code) AS error_code,
+			unique_id,
+			concat(coalesce(address, ''), ';', coalesce(latlng, '')) AS addresslatlong,
+			geom_id AS parcel_id
+		FROM production_etl.periscope_api_responses_partitioned a
+			JOIN client_filters b ON a.key = b.key
+		WHERE date(a.created_at) >= date('2022-07-21')
+            AND date(a.created_at) < date('2022-08-15')
+	)
+),
+all_requests_raw AS (
+ SELECT *, 
+    row_number() OVER (ORDER BY unique_id) AS global_row_num
+ FROM all_requests
+),
+all_requests_raw_OK AS (
+    SELECT *
+    FROM all_requests_raw
+    WHERE error_code = 'OK'
+),
+all_requests_first_seen_addresslatlong_OK AS (
+	--Create uniqueness
+	SELECT type,
+	    client_name,
+	    use_cases,
+		addresslatlong,
+		min(timestep) AS timestep
+	FROM all_requests_raw_OK
+	GROUP BY 1, 2, 3, 4
+),
+all_requests_first_seen_addresslatlong_OK_glob_row AS (
+	--Create uniqueness
+	SELECT a.type,
+	    a.client_name,
+		a.addresslatlong,
+		a.use_cases,
+		a.timestep,
+		min(b.global_row_num) AS global_row_num,
+        1 AS first_seen_addresslatlong
+	FROM all_requests_first_seen_addresslatlong_OK a
+	LEFT JOIN all_requests_raw_OK b ON ( a.type = b.type
+	    AND a.client_name = b.client_name
+		AND a.addresslatlong = b.addresslatlong
+		AND a.use_cases = b.use_cases
+		AND a.timestep = b.timestep
+    )
+	GROUP BY 1, 2, 3, 4, 5
+),
+all_requests_first_seen_parcel_OK AS (
+	--Create uniqueness
+	SELECT type,
+	    client_name,
+		parcel_id,
+		use_cases,
+		min(timestep) AS timestep
+	FROM all_requests_raw_OK
+	GROUP BY 1, 2, 3, 4
+),
+all_requests_first_seen_parcel_OK_glob_row AS (
+    SELECT a.type,
+	    a.client_name,
+		a.parcel_id,
+		a.use_cases,
+		a.timestep,
+        min(b.global_row_num) AS global_row_num,
+        1 AS first_seen_parcel
+    FROM all_requests_first_seen_parcel_OK a
+    LEFT JOIN all_requests_raw_OK b ON ( 
+        a.type = b.type
+	    AND a.client_name = b.client_name
+		AND a.parcel_id = b.parcel_id
+		AND a.use_cases = b.use_cases
+		AND a.timestep = b.timestep
+    )
+    GROUP BY 1, 2, 3, 4, 5
+),
+all_requests_complete_data_OK_parcel AS (
+	--Add first_seen to the original table
+	SELECT raw.*,
+		fsp.first_seen_parcel
+	  FROM all_requests_raw_OK raw
+	    LEFT JOIN all_requests_first_seen_parcel_OK_glob_row fsp ON raw.global_row_num = fsp.global_row_num
+),
+all_requests_complete_data_OK_parcel_addresslatlong AS (
+	--Add first_seen to the original table
+	SELECT raw.*,
+		fs.first_seen_addresslatlong
+	  FROM  all_requests_complete_data_OK_parcel raw
+	    LEFT JOIN all_requests_first_seen_addresslatlong_OK_glob_row fs ON raw.global_row_num = fs.global_row_num
+),
+all_requests_final_OK AS (
+    SELECT type,
+    		client_name,
+    		key,
+    		use_cases,
+    		application_type,
+    		error_code,
+    		date_trunc('month', date(timestep)) AS date,
+    		min(date(timestep)) AS first_seen_record,
+    		max(date(timestep)) AS last_seen_record,
+    		count(distinct unique_id) AS total_requests,
+    		count(first_seen_addresslatlong = 1) AS unique_requests,
+    		count(first_seen_parcel = 1) AS unique_geoms_returned
+    	FROM all_requests_complete_data_OK_parcel_addresslatlong
+    	GROUP BY 1,
+    		2,
+    		3,
+    		4,
+    		5,
+    		6,
+    		7
+),
+all_requests_raw_not_OK AS (
+    SELECT *
+    FROM all_requests_raw
+    WHERE error_code != 'OK' 
+        OR error_code = ''
+        OR error_code IS NULL
+),
+all_requests_first_seen_addresslatlong_not_OK AS (
+	--Create uniqueness
+	SELECT type,
+	    client_name,
+		addresslatlong,
+		use_cases,
+		min(timestep) AS timestep
+	FROM all_requests_raw_not_OK
+	GROUP BY 1, 2, 3, 4
+),
+all_requests_first_seen_addresslatlong_not_OK_glob_row AS (
+	--Create uniqueness
+	SELECT a.type,
+	    a.client_name,
+		a.addresslatlong,
+		a.use_cases,
+		a.timestep,
+		min(b.global_row_num) AS global_row_num,
+        1 AS first_seen_addresslatlong
+	FROM all_requests_first_seen_addresslatlong_not_OK a
+	LEFT JOIN all_requests_raw_not_OK b ON ( a.type = b.type
+	    AND a.client_name = b.client_name
+		AND a.addresslatlong = b.addresslatlong
+		AND a.use_cases = b.use_cases
+		AND a.timestep = b.timestep
+    )
+	GROUP BY 1, 2, 3, 4, 5
+),
+all_requests_complete_data_not_OK_addresslatlong AS (
+	--Add first_seen to the original table
+	SELECT raw.*,
+		fs.first_seen_addresslatlong
+	FROM all_requests_raw_not_OK raw
+		LEFT JOIN all_requests_first_seen_addresslatlong_not_OK_glob_row fs ON raw.global_row_num = fs.global_row_num
+),
+all_requests_final_not_OK AS (
+    SELECT type,
+		client_name,
+		key,
+		use_cases,
+		application_type,
+		error_code,
+		date_trunc('month', date(timestep)) AS date,
+		min(date(timestep)) AS first_seen_record,
+		max(date(timestep)) AS last_seen_record,
+		count(distinct unique_id) AS total_requests,
+		count(first_seen_addresslatlong = 1) AS unique_requests,
+		0 AS unique_geoms_returned 
+	FROM all_requests_complete_data_not_OK_addresslatlong
+	GROUP BY 1,
+		2,
+		3,
+		4,
+		5,
+		6,
+		7
+),
+all_requests_final AS(
+	(
+		SELECT *
+		FROM all_requests_final_OK
+	)
+	UNION ALL
+	(
+		SELECT *
+		FROM all_requests_final_not_OK
+	)
+)
+select * from all_requests_final
