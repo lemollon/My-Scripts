@@ -1,0 +1,19 @@
+With total as (
+	SELECT line_type,count(*) as tot, 1 as Field
+	FROM "bi_for_tableau"."mother_data"
+	Where line_type = 'Commercial Lines'
+		AND environment = 'Production'
+		AND date >= date('2021-09-01')
+		AND date <= date('2022-09-01')
+		Group by line_type
+),
+ok_cnt as (
+	SELECT line_type,count(*) as tot_ok, 1 as Field
+	FROM "bi_for_tableau"."mother_data"
+	Where error_code = 'OK'
+		AND line_type = 'Commercial Lines'
+		AND environment = 'Production'
+		AND date >= date('2021-09-01')
+		AND date <= date('2022-09-01')
+		Group by line_type
+)
