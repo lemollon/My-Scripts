@@ -1,0 +1,40 @@
+with full_apikeys as (
+  select 
+    a.*,
+    JSON_EXTRACT_ARRAY(b.datapack, '$.personal_lines.enabled_features') as datapack
+  from `bi-dev-55cf.cape.bi_apikeys` as a 
+  join `bi-dev-55cf.cape.apikeys` as b 
+    on a.apikey = b.name 
+  where 
+    a.client in ('Swiss Re', 'Assurant')
+  order by a.apikey
+)
+select 
+  client,
+  apikey,
+  created_at,
+  updated_at,
+  environment,
+  use_case,
+  delivery_channel,
+  description,
+  features
+from 
+  full_apikeys 
+CROSS JOIN UNNEST(datapack) as features
+
+/* Notes on Cross Join Unesst
+
+In the provided SQL code, a CROSS JOIN is used to extract and unnest data from the `datapack` array within the `full_apikeys` CTE (Common Table Expression). Let me explain the reasons behind this choice.
+
+1. Data Expansion:
+The `datapack` column contains an array of enabled features for each `apikey`. Since a single row in `full_apikeys` can have multiple features stored in this array, a CROSS JOIN is used to expand this array into separate rows. This operation creates a new row for each enabled feature, effectively "unfolding" the data and presenting it in a more accessible format.
+
+2. Relating Features to API Keys:
+The `full_apikeys` CTE combines data from two tables: `bi_apikeys` and `apikeys`. The `apikey` column is used as the common key to match and join records from both tables. Once the `datapack` array is expanded using UNNEST, each feature row is still related to the original `apikey` it came from. This way, the extracted features are properly associated with the corresponding API key records.
+
+3. Facilitating Feature Analysis:
+By performing a CROSS JOIN with UNNEST, it becomes easier to analyze and query the individual features for each API key. This transformation allows for more straightforward filtering, grouping, and aggregation of data based on specific features, which could be crucial for business intelligence analysis.
+
+In summary, the CROSS JOIN with UNNEST in this SQL code is used to transform the array of enabled features into individual rows, making it easier to analyze and work with the data, especially when conducting business intelligence tasks.
+
